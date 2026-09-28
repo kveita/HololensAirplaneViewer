@@ -1,3 +1,4 @@
+using System;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml;
 using HololensAirplaneViewer.Services;
