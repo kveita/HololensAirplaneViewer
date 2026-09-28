@@ -44,6 +44,9 @@ namespace HololensAirplaneViewer.Content
         private bool fetchInProgress;
         private DateTime lastFetchUtc = DateTime.MinValue;
         private volatile List<AirplaneState> airplanes = new List<AirplaneState>();
+        private bool manualLocationActive;
+        private double manualLatitude;
+        private double manualLongitude;
 
         private Vector3 currentHeadPosition = Vector3.Zero;
         private Vector3 currentHeadDirection = Vector3.UnitZ;
@@ -137,22 +140,64 @@ namespace HololensAirplaneViewer.Content
 
         public async void Update(StepTimer timer)
         {
+            double requestedLatitude;
+            double requestedLongitude;
+            bool requestedManualLocation = LocationOverrideStore.TryGet(
+                out requestedLatitude,
+                out requestedLongitude);
+
+            if (requestedManualLocation != manualLocationActive
+                || (requestedManualLocation
+                    && (requestedLatitude != manualLatitude
+                        || requestedLongitude != manualLongitude)))
+            {
+                manualLocationActive = requestedManualLocation;
+                manualLatitude = requestedLatitude;
+                manualLongitude = requestedLongitude;
+                lastFetchUtc = DateTime.MinValue;
+            }
+
             // Fetch fresh aircraft state vectors every 10 seconds (OpenSky anonymous tier)
             if (!fetchInProgress && (DateTime.UtcNow - lastFetchUtc).TotalSeconds >= 10.0)
             {
                 fetchInProgress = true;
                 try
                 {
-                    double lat = 59.91, lon = 10.75; // fallback ≈ Oslo
-                    var gps = await geolocationService.GetCurrentLocationAsync();
-                    if (gps != null)
+                    double lat;
+                    double lon;
+                    bool useManualLocation = LocationOverrideStore.TryGet(out lat, out lon);
+
+                    if (!useManualLocation)
                     {
-                        lat = gps.Coordinate.Point.Position.Latitude;
-                        lon = gps.Coordinate.Point.Position.Longitude;
-                        currentLatitude = lat;
-                        currentLongitude = lon;
-                        gpsDebug = string.Format(CultureInfo.InvariantCulture, "GPS {0:F3},{1:F3}", lat, lon);
+                        lat = 59.91;
+                        lon = 10.75;
                     }
+
+                    if (!useManualLocation)
+                    {
+                        var gps = await geolocationService.GetCurrentLocationAsync();
+                        if (gps != null)
+                        {
+                            lat = gps.Coordinate.Point.Position.Latitude;
+                            lon = gps.Coordinate.Point.Position.Longitude;
+                            gpsDebug = string.Format(
+                                CultureInfo.InvariantCulture,
+                                "GPS {0:F3},{1:F3}",
+                                lat,
+                                lon);
+                        }
+                    }
+                    else
+                    {
+                        gpsDebug = string.Format(
+                            CultureInfo.InvariantCulture,
+                            "GPS* {0:F3},{1:F3}",
+                            lat,
+                            lon);
+                    }
+
+                    currentLatitude = lat;
+                    currentLongitude = lon;
 
                     // Fetch aircraft within a ±3° box around the user's GPS fix
                     var live = await airplaneService.GetLiveStatesAsync(

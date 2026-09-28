@@ -6,10 +6,13 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
-    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+    Loaded="SettingsPage_Loaded">
 
-    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-        <TextBox x:Name="AddressTextBox" Header="Enter Address" Width="300" />
-        <Button Content="Apply" Click="ApplyButton_Click" />
-    </StackPanel>
+    <Grid>
+        <TextBlock
+            Text="Opening location settings..."
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center" />
+    </Grid>
 </Page>

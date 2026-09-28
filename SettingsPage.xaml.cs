@@ -1,26 +1,39 @@
-using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml;
+using HololensAirplaneViewer.Services;
 
 namespace HololensAirplaneViewer
 {
     public sealed partial class SettingsPage : Page
     {
+        private bool dialogShown;
+
         public SettingsPage()
         {
-            this.InitializeComponent();
+            InitializeComponent();
         }
 
-        private void ApplyButton_Click(object sender, RoutedEventArgs e)
+        private async void SettingsPage_Loaded(object sender, RoutedEventArgs e)
         {
-            // Capture text and close the view
-            string address = AddressTextBox.Text;
-            
-            // TODO: Pass the address back to the main view
-            
-            // Close this view
-            this.Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () => {
+            if (dialogShown)
+            {
+                return;
+            }
+
+            dialogShown = true;
+
+            try
+            {
+                var dialog = new LocationInputDialog();
+                if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+                {
+                    LocationOverrideStore.Set(dialog.FinalLatitude, dialog.FinalLongitude);
+                }
+            }
+            finally
+            {
                 Window.Current.Close();
-            });
+            }
         }
     }
 }
