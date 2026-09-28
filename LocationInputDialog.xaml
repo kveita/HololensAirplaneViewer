@@ -5,7 +5,6 @@
     Title="Set Viewing Location"
     PrimaryButtonText="Set GPS"
     SecondaryButtonText="Cancel"
-    DefaultButton="Primary"
     PrimaryButtonClick="LocationInputDialog_PrimaryButtonClick">
 
     <ScrollViewer MaxHeight="560">
