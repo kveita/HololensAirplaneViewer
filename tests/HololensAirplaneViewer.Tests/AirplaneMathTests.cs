@@ -10,8 +10,8 @@ namespace HololensAirplaneViewer.Tests
     /// algorithm used by AirplaneRenderer.ComputeAirplanePosition) and the
     /// line-of-sight / horizon visibility checks.
     ///
-    /// Reference frame (Oslo, Norway):
-    ///   lat 59.91°, lon 10.75°  — the app's default GPS fallback.
+    /// Reference frame (Oslo, Norway) used only as a stable test fixture:
+    ///   lat 59.91°, lon 10.75°.
     /// At this latitude 1° of longitude ≈ 55,800 m (111,320 × cos(59.91°)).
     /// </summary>
     public class AirplaneMathTests

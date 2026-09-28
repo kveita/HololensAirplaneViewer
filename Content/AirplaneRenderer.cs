@@ -60,7 +60,7 @@ namespace HololensAirplaneViewer.Content
         /// </summary>
         private float compassHeadingDegrees;
 
-        private string gpsDebug = "GPS: --";
+        private string gpsDebug = "GPS: WAITING FOR OS LOCATION";
         private string apiDebug = "OpenSky: --";
         private string lastError = "";
         
@@ -70,8 +70,8 @@ namespace HololensAirplaneViewer.Content
         private SpatialStationaryFrameOfReference stationaryReferenceFrame;
 
         // Observer's GPS fix (used for lat/lon → local dome mapping)
-        private double currentLatitude = 59.91;  // ≈ Oslo fallback
-        private double currentLongitude = 10.75;
+        private double currentLatitude;
+        private double currentLongitude;
 
         private const int MaxAirplanesRendered = 15;
         private const float MarkerScale = 0.25f;
@@ -169,23 +169,28 @@ namespace HololensAirplaneViewer.Content
 
                     if (!useManualLocation)
                     {
-                        lat = 59.91;
-                        lon = 10.75;
-                    }
-
-                    if (!useManualLocation)
-                    {
+                        // HoloLens 1 has no dedicated GPS chip. Geolocator
+                        // obtains the OS-inferred location, including its
+                        // network/IP-based location when available.
                         var gps = await geolocationService.GetCurrentLocationAsync();
-                        if (gps != null)
+                        if (gps == null)
                         {
-                            lat = gps.Coordinate.Point.Position.Latitude;
-                            lon = gps.Coordinate.Point.Position.Longitude;
-                            gpsDebug = string.Format(
-                                CultureInfo.InvariantCulture,
-                                "GPS {0:F3},{1:F3}",
-                                lat,
-                                lon);
+                            // Never query OpenSky with a fabricated observer
+                            // position. Retry after the normal fetch interval.
+                            gpsDebug = "GPS: WAITING FOR OS LOCATION";
+                            apiDebug = "OpenSky: WAITING FOR GPS";
+                            airplanes = new List<AirplaneState>();
+                            lastFetchUtc = DateTime.UtcNow;
+                            return;
                         }
+
+                        lat = gps.Coordinate.Point.Position.Latitude;
+                        lon = gps.Coordinate.Point.Position.Longitude;
+                        gpsDebug = string.Format(
+                            CultureInfo.InvariantCulture,
+                            "GPS {0:F3},{1:F3}",
+                            lat,
+                            lon);
                     }
                     else
                     {
