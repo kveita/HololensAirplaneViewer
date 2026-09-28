@@ -303,3 +303,5 @@ namespace HololensAirplaneViewer.Tests
         }
     }
 }
+
+// CI trigger update: verifying CI picks up changes
