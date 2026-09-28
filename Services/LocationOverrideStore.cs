@@ -13,6 +13,7 @@ namespace HololensAirplaneViewer.Services
         private static bool hasOverride;
         private static double latitude;
         private static double longitude;
+        private static int generation;
 
         public static void Set(double newLatitude, double newLongitude)
         {
@@ -21,6 +22,7 @@ namespace HololensAirplaneViewer.Services
                 latitude = newLatitude;
                 longitude = newLongitude;
                 hasOverride = true;
+                generation++;
             }
         }
 
@@ -31,6 +33,19 @@ namespace HololensAirplaneViewer.Services
                 currentLatitude = latitude;
                 currentLongitude = longitude;
                 return hasOverride;
+            }
+        }
+
+        /// <summary>
+        /// Returns the current generation counter value. Each call to Set()
+        /// increments this counter. Used by AirplaneRenderer to detect
+        /// stale in-flight fetches.
+        /// </summary>
+        public static int GetGeneration()
+        {
+            lock (SyncRoot)
+            {
+                return generation;
             }
         }
     }

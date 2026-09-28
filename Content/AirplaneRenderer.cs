@@ -138,6 +138,13 @@ namespace HololensAirplaneViewer.Content
             }
         }
 
+        /// <summary>
+        /// Monotonically increasing counter from LocationOverrideStore.
+        /// Captured at fetch start; if it changes before the fetch completes,
+        /// the results are stale and must be discarded.
+        /// </summary>
+        private int fetchGeneration;
+
         public async void Update(StepTimer timer)
         {
             double requestedLatitude;
@@ -161,6 +168,9 @@ namespace HololensAirplaneViewer.Content
             if (!fetchInProgress && (DateTime.UtcNow - lastFetchUtc).TotalSeconds >= 10.0)
             {
                 fetchInProgress = true;
+                // Capture the current override generation so we can detect
+                // if the user changed the location while this fetch is in flight.
+                fetchGeneration = LocationOverrideStore.GetGeneration();
                 try
                 {
                     double lat;
@@ -204,11 +214,28 @@ namespace HololensAirplaneViewer.Content
                     currentLatitude = lat;
                     currentLongitude = lon;
 
+                    // Normalize longitude bounds to [-180, 180] for the OpenSky query.
+                    // Near the antimeridian, lon ± 3.0 can exceed the valid range,
+                    // causing incorrect query results or API errors.
+                    double lomin = NormalizeLongitude(lon - 3.0);
+                    double lomax = NormalizeLongitude(lon + 3.0);
+                    double lamin = lat - 3.0;
+                    double lamax = lat + 3.0;
+
                     // Fetch aircraft within a ±3° box around the user's GPS fix
                     var live = await airplaneService.GetLiveStatesAsync(
-                        lamin: lat - 3.0, lamax: lat + 3.0,
-                        lomin: lon - 3.0, lomax: lon + 3.0,
+                        lamin: lamin, lamax: lamax,
+                        lomin: lomin, lomax: lomax,
                         maxCount: MaxAirplanesRendered);
+
+                    // If the user changed the location override while this fetch was
+                    // in flight, discard these stale results — the new location will
+                    // be fetched on the next update cycle.
+                    if (fetchGeneration != LocationOverrideStore.GetGeneration())
+                    {
+                        lastFetchUtc = DateTime.UtcNow;
+                        return;
+                    }
 
                     // Rank aircraft: airborne first, but also keep on-ground
                     // traffic within 15 km of the user (e.g. aircraft at your
@@ -713,6 +740,17 @@ namespace HololensAirplaneViewer.Content
             while (a > Math.PI) a -= (float)(2.0 * Math.PI);
             while (a < -Math.PI) a += (float)(2.0 * Math.PI);
             return a;
+        }
+
+        /// <summary>
+        /// Normalizes a longitude value to the range [-180, 180].
+        /// Essential for correct behavior near the antimeridian.
+        /// </summary>
+        private static double NormalizeLongitude(double lon)
+        {
+            while (lon > 180.0) lon -= 360.0;
+            while (lon < -180.0) lon += 360.0;
+            return lon;
         }
 
         private static string Sanitize(string text)
