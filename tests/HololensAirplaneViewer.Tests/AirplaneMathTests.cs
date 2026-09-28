@@ -271,8 +271,7 @@ namespace HololensAirplaneViewer.Tests
             // Points at 179°E and 179°W are only ~2° apart (about 111 km at equator)
             double d = AirplaneMath.GreatCircleDistanceMeters(
                 0.0, 179.0,   // observer
-                0.0, -179.0,  // aircraft
-                0.0);
+                0.0, -179.0); // aircraft
 
             // Should be approximately 2° of longitude at equator ≈ 222 km
             // (111,320 m/degree × 2 degrees)
