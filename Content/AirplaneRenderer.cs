@@ -72,6 +72,7 @@ namespace HololensAirplaneViewer.Content
         // Observer's GPS fix (used for lat/lon → local dome mapping)
         private double currentLatitude;
         private double currentLongitude;
+        private bool observerLocationKnown;
 
         private const int MaxAirplanesRendered = 15;
         private const float MarkerScale = 0.25f;
@@ -154,6 +155,9 @@ namespace HololensAirplaneViewer.Content
                 manualLocationActive = requestedManualLocation;
                 manualLatitude = requestedLatitude;
                 manualLongitude = requestedLongitude;
+                airplanes = new List<AirplaneState>();
+                apiDebug = "OpenSky: REFRESHING";
+                lastError = "";
                 lastFetchUtc = DateTime.MinValue;
             }
 
@@ -201,13 +205,24 @@ namespace HololensAirplaneViewer.Content
                             lon);
                     }
 
+                    bool observerLocationChanged = !observerLocationKnown
+                        || Math.Abs(currentLatitude - lat) > 0.001
+                        || Math.Abs(currentLongitude - lon) > 0.001;
+
                     currentLatitude = lat;
                     currentLongitude = lon;
+                    observerLocationKnown = true;
+
+                    if (observerLocationChanged)
+                    {
+                        airplanes = new List<AirplaneState>();
+                    }
 
                     // Fetch aircraft within a ±3° box around the user's GPS fix
-                    var live = await airplaneService.GetLiveStatesAsync(
-                        lamin: lat - 3.0, lamax: lat + 3.0,
-                        lomin: lon - 3.0, lomax: lon + 3.0,
+                    var live = await airplaneService.GetLiveStatesAroundAsync(
+                        latitude: lat,
+                        longitude: lon,
+                        radiusDegrees: 3.0,
                         maxCount: MaxAirplanesRendered);
 
                     // Rank aircraft: airborne first, but also keep on-ground

@@ -57,6 +57,38 @@ namespace HololensAirplaneViewer.Services
         }
 
         /// <summary>
+        /// Returns aircraft around an observer. Locations near ±180° longitude
+        /// are fetched with two valid OpenSky boxes and merged.
+        /// </summary>
+        public async Task<List<AirplaneState>> GetLiveStatesAroundAsync(
+            double latitude,
+            double longitude,
+            double radiusDegrees,
+            int maxCount = 15)
+        {
+            var allStates = new List<AirplaneState>();
+            var bounds = OpenSkyBounds.Around(latitude, longitude, radiusDegrees);
+
+            foreach (var box in bounds)
+            {
+                allStates.AddRange(await GetLiveStatesAsync(
+                    lamin: box.Lamin,
+                    lamax: box.Lamax,
+                    lomin: box.Lomin,
+                    lomax: box.Lomax,
+                    maxCount: maxCount));
+            }
+
+            // The split boxes only meet at the antimeridian, but deduplicate
+            // defensively before ranking the merged result.
+            var uniqueStates = allStates
+                .GroupBy(state => state.Icao24)
+                .Select(group => group.First());
+
+            return AirplaneSelection.Select(uniqueStates, maxCount);
+        }
+
+        /// <summary>
         /// Parses the OpenSky "states/all" JSON response into raw aircraft states
         /// (no selection/sorting — see <see cref="AirplaneSelection"/>).
         /// Each state vector is a flat JSON array of 17 fields:
