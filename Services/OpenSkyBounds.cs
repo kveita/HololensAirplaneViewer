@@ -85,12 +85,12 @@ namespace HololensAirplaneViewer.Services
 
         private static double NormalizeLongitude(double longitude)
         {
-            while (longitude < MinLongitude)
+            longitude %= 360.0;
+            if (longitude < MinLongitude)
             {
                 longitude += 360.0;
             }
-
-            while (longitude > MaxLongitude)
+            else if (longitude > MaxLongitude)
             {
                 longitude -= 360.0;
             }
