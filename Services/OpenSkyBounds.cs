@@ -48,6 +48,8 @@ namespace HololensAirplaneViewer.Services
                 || radiusDegrees > 180.0
                 || double.IsNaN(radiusDegrees)
                 || double.IsInfinity(radiusDegrees))
+            {
+                throw new ArgumentOutOfRangeException(nameof(radiusDegrees));
             }
 
             latitude = Clamp(latitude, MinLatitude, MaxLatitude);
