@@ -65,7 +65,7 @@ namespace HololensAirplaneViewer.Content
         private string lastError = "";
         
         private Vector3 settingsButtonPosition = Vector3.Zero;
-        private float settingsButtonRadius = 0.2f;
+        private const float SettingsHitRadius = MarkerScale * 2.0f;
 
         private SpatialStationaryFrameOfReference stationaryReferenceFrame;
 
@@ -138,13 +138,6 @@ namespace HololensAirplaneViewer.Content
             }
         }
 
-        /// <summary>
-        /// Monotonically increasing counter from LocationOverrideStore.
-        /// Captured at fetch start; if it changes before the fetch completes,
-        /// the results are stale and must be discarded.
-        /// </summary>
-        private int fetchGeneration;
-
         public async void Update(StepTimer timer)
         {
             double requestedLatitude;
@@ -161,11 +154,6 @@ namespace HololensAirplaneViewer.Content
                 manualLocationActive = requestedManualLocation;
                 manualLatitude = requestedLatitude;
                 manualLongitude = requestedLongitude;
-                // Clear stale aircraft and update observer coordinates immediately
-                // so the renderer shows the new location while waiting for fresh data.
-                airplanes = new List<AirplaneState>();
-                currentLatitude = requestedLatitude;
-                currentLongitude = requestedLongitude;
                 lastFetchUtc = DateTime.MinValue;
             }
 
@@ -173,9 +161,6 @@ namespace HololensAirplaneViewer.Content
             if (!fetchInProgress && (DateTime.UtcNow - lastFetchUtc).TotalSeconds >= 10.0)
             {
                 fetchInProgress = true;
-                // Capture the current override generation so we can detect
-                // if the user changed the location while this fetch is in flight.
-                fetchGeneration = LocationOverrideStore.GetGeneration();
                 try
                 {
                     double lat;
@@ -219,30 +204,11 @@ namespace HololensAirplaneViewer.Content
                     currentLatitude = lat;
                     currentLongitude = lon;
 
-                    // Normalize longitude bounds to [-180, 180] for the OpenSky query.
-                    // Near the antimeridian, lon ± 3.0 can exceed the valid range,
-                    // causing incorrect query results or API errors.
-                    double lomin = NormalizeLongitude(lon - 3.0);
-                    double lomax = NormalizeLongitude(lon + 3.0);
-                    // Clamp latitude bounds to [-90, 90] for the OpenSky API.
-                    // Near the poles, lat ± 3.0 can exceed the valid range.
-                    double lamin = Math.Max(-90.0, Math.Min(90.0, lat - 3.0));
-                    double lamax = Math.Max(-90.0, Math.Min(90.0, lat + 3.0));
-
                     // Fetch aircraft within a ±3° box around the user's GPS fix
                     var live = await airplaneService.GetLiveStatesAsync(
-                        lamin: lamin, lamax: lamax,
-                        lomin: lomin, lomax: lomax,
+                        lamin: lat - 3.0, lamax: lat + 3.0,
+                        lomin: lon - 3.0, lomax: lon + 3.0,
                         maxCount: MaxAirplanesRendered);
-
-                    // If the user changed the location override while this fetch was
-                    // in flight, discard these stale results — the new location will
-                    // be fetched on the next update cycle.
-                    if (fetchGeneration != LocationOverrideStore.GetGeneration())
-                    {
-                        lastFetchUtc = DateTime.UtcNow;
-                        return;
-                    }
 
                     // Rank aircraft: airborne first, but also keep on-ground
                     // traffic within 15 km of the user (e.g. aircraft at your
@@ -749,17 +715,6 @@ namespace HololensAirplaneViewer.Content
             return a;
         }
 
-        /// <summary>
-        /// Normalizes a longitude value to the range [-180, 180].
-        /// Essential for correct behavior near the antimeridian.
-        /// </summary>
-        private static double NormalizeLongitude(double lon)
-        {
-            while (lon > 180.0) lon -= 360.0;
-            while (lon < -180.0) lon += 360.0;
-            return lon;
-        }
-
         private static string Sanitize(string text)
         {
             var chars = new List<char>();
@@ -771,6 +726,39 @@ namespace HololensAirplaneViewer.Content
                 else chars.Add(' ');
             }
             return new string(chars.ToArray());
+        }
+
+        private Vector3 GetCompassRotatedPosition(Vector3 worldPos)
+        {
+            float headingRad = (float)(-compassHeadingDegrees * Math.PI / 180.0);
+            Matrix4x4 compassRot = Matrix4x4.CreateRotationY(headingRad);
+            Vector3 local = worldPos - worldCenter;
+            return Vector3.Transform(local, compassRot) + worldCenter;
+        }
+
+        private static bool IsGazeHit(
+            SpatialPointerPose headPose,
+            Vector3 targetPosition,
+            float hitRadius)
+        {
+            if (headPose == null)
+            {
+                return false;
+            }
+
+            Vector3 gazeDir = headPose.Head.ForwardDirection;
+            Vector3 gazeOrigin = headPose.Head.Position;
+            Vector3 toTarget = targetPosition - gazeOrigin;
+            float t = Vector3.Dot(toTarget, gazeDir);
+
+            if (t < 0)
+            {
+                return false;
+            }
+
+            Vector3 closestPoint = gazeOrigin + gazeDir * t;
+            float distanceSquared = (targetPosition - closestPoint).LengthSquared();
+            return distanceSquared < hitRadius * hitRadius;
         }
 
         private struct UvRect
@@ -803,25 +791,10 @@ namespace HololensAirplaneViewer.Content
             if (headPose == null || settingsButtonPosition == Vector3.Zero)
                 return false;
 
-            // Simplified sphere intersection for the button
-            Vector3 gazeDir = headPose.Head.ForwardDirection;
-            Vector3 gazeOrigin = headPose.Head.Position;
-            
-            // Vector from gaze origin to button center
-            Vector3 toButton = settingsButtonPosition - gazeOrigin;
-            
-            // Distance from origin to projection of center onto gaze line
-            float t = Vector3.Dot(toButton, gazeDir);
-            
-            if (t < 0) return false; // Button is behind us
-
-            // Closest point on gaze line to button center
-            Vector3 closestPoint = gazeOrigin + gazeDir * t;
-            
-            // Distance squared from button center to closest point on line
-            float distSq = (settingsButtonPosition - closestPoint).LengthSquared();
-            
-            return distSq < (settingsButtonRadius * settingsButtonRadius);
+            // DrawTextBillboard rotates the label around the dome center.
+            // Hit-test the same world position that is actually rendered.
+            Vector3 buttonPosition = GetCompassRotatedPosition(settingsButtonPosition);
+            return IsGazeHit(headPose, buttonPosition, SettingsHitRadius);
         }
 
         /// <summary>
@@ -833,33 +806,14 @@ namespace HololensAirplaneViewer.Content
         {
             if (headPose == null) return null;
 
-            Vector3 gazeDir = headPose.Head.ForwardDirection;
-            Vector3 gazeOrigin = headPose.Head.Position;
-            float hitRadiusSq = MarkerScale * MarkerScale * 4f;
-
             // Snapshot volatile list to avoid ArgumentOutOfRangeException
             var snapshot = airplanes;
-
-            // Compass rotation must match DrawCubeAt exactly
-            float headingRad = (float)(-compassHeadingDegrees * Math.PI / 180.0);
-            Matrix4x4 compassRot = Matrix4x4.CreateRotationY(headingRad);
 
             for (int i = 0; i < snapshot.Count; i++)
             {
                 var plane = snapshot[i];
-                var worldPos = ComputeAirplanePosition(plane);
-
-                // Apply same compass rotation as DrawCubeAt
-                Vector3 local = worldPos - worldCenter;
-                Vector3 markerPos = Vector3.Transform(local, compassRot) + worldCenter;
-
-                Vector3 toMarker = markerPos - gazeOrigin;
-                float t = Vector3.Dot(toMarker, gazeDir);
-                if (t < 0) continue;
-
-                Vector3 closestPoint = gazeOrigin + gazeDir * t;
-                float distSq = (markerPos - closestPoint).LengthSquared();
-                if (distSq < hitRadiusSq)
+                Vector3 markerPos = GetCompassRotatedPosition(ComputeAirplanePosition(plane));
+                if (IsGazeHit(headPose, markerPos, MarkerScale * 2.0f))
                     return plane;
             }
             return null;
