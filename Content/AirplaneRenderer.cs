@@ -161,6 +161,11 @@ namespace HololensAirplaneViewer.Content
                 manualLocationActive = requestedManualLocation;
                 manualLatitude = requestedLatitude;
                 manualLongitude = requestedLongitude;
+                // Clear stale aircraft and update observer coordinates immediately
+                // so the renderer shows the new location while waiting for fresh data.
+                airplanes = new List<AirplaneState>();
+                currentLatitude = requestedLatitude;
+                currentLongitude = requestedLongitude;
                 lastFetchUtc = DateTime.MinValue;
             }
 
@@ -219,8 +224,10 @@ namespace HololensAirplaneViewer.Content
                     // causing incorrect query results or API errors.
                     double lomin = NormalizeLongitude(lon - 3.0);
                     double lomax = NormalizeLongitude(lon + 3.0);
-                    double lamin = lat - 3.0;
-                    double lamax = lat + 3.0;
+                    // Clamp latitude bounds to [-90, 90] for the OpenSky API.
+                    // Near the poles, lat ± 3.0 can exceed the valid range.
+                    double lamin = Math.Max(-90.0, Math.Min(90.0, lat - 3.0));
+                    double lamax = Math.Max(-90.0, Math.Min(90.0, lat + 3.0));
 
                     // Fetch aircraft within a ±3° box around the user's GPS fix
                     var live = await airplaneService.GetLiveStatesAsync(
