@@ -28,7 +28,7 @@ Put on the HoloLens and launch the app:
 ## How It Works
 | Step | Detail |
 |------|--------|
-| **GPS** | HoloLens `Geolocator` gets the device's current lat/lon/altitude |
+| **GPS** | HoloLens `Geolocator` gets the OS-inferred device location (HoloLens 1 has no dedicated GPS chip); the app waits for this fix instead of using a hardcoded coordinate |
 | **OpenSky fetch** | Fetches live aircraft state vectors from OpenSky Network every 10 seconds (anonymous tier) |
 | **GPS→Local mapping** | Converts each airplane's WGS-84 lat/lon/alt to local HoloLens coordinates using a planar approximation around the user's GPS fix |
 | **Sorting** | The closest airplanes (by horizontal distance, biased airborne) are selected |

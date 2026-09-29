@@ -10,8 +10,8 @@ namespace HololensAirplaneViewer.Tests
     /// algorithm used by AirplaneRenderer.ComputeAirplanePosition) and the
     /// line-of-sight / horizon visibility checks.
     ///
-    /// Reference frame (Oslo, Norway):
-    ///   lat 59.91°, lon 10.75°  — the app's default GPS fallback.
+    /// Reference frame (Oslo, Norway) used only as a stable test fixture:
+    ///   lat 59.91°, lon 10.75°.
     /// At this latitude 1° of longitude ≈ 55,800 m (111,320 × cos(59.91°)).
     /// </summary>
     public class AirplaneMathTests
@@ -229,5 +229,79 @@ namespace HololensAirplaneViewer.Tests
                 OsloLat, OsloLon, OsloLat + 3.0, OsloLon) / 1000.0;
             Assert.InRange(boxEdgeKm, 330.0, 340.0);
         }
+
+        // ------------------------------------------------------------------
+        // Antimeridian handling (regression tests for PR #29 Copilot review)
+        // ------------------------------------------------------------------
+
+        [Fact]
+        public void ComputeDomePosition_Antimeridian_CrossesCorrectly()
+        {
+            // Observer at 179°E, aircraft at 179°W (-179°) — only 2° apart,
+            // not 358°. Without normalization, dLon would be -358° causing
+            // incorrect positioning.
+            var p = AirplaneMath.ComputeDomePosition(
+                0.0, -179.0, 0.0,  // plane at 179°W (lat=0, lon=-179)
+                0.0, 179.0,        // observer at 179°E (lat=0, lon=179)
+                Origin, CeilingY);
+
+            // The plane should appear ~2° east of the observer (positive X)
+            // 2° × 111,320 m × cos(0°) ≈ 222,640 m, but clamped to dome radius
+            Assert.True(p.X > 0.0f, "Plane should appear east of observer");
+            Assert.Equal(0.0f, p.Z, 3); // Same latitude → no Z offset
+        }
+
+        [Fact]
+        public void ComputeDomePosition_Antimeridian_ObserverWest()
+        {
+            // Observer at 179°W (-179°), aircraft at 179°E — only 2° apart
+            var p = AirplaneMath.ComputeDomePosition(
+                0.0, 179.0, 0.0,   // plane at 179°E (lat=0, lon=179)
+                0.0, -179.0,       // observer at 179°W (lat=0, lon=-179)
+                Origin, CeilingY);
+
+            // The plane should appear ~2° west of the observer (negative X)
+            Assert.True(p.X < 0.0f, "Plane should appear west of observer");
+            Assert.Equal(0.0f, p.Z, 3);
+        }
+
+        [Fact]
+        public void GreatCircleDistance_Antimeridian_IsShort()
+        {
+            // Points at 179°E and 179°W are only ~2° apart (about 111 km at equator)
+            double d = AirplaneMath.GreatCircleDistanceMeters(
+                0.0, 179.0,   // observer
+                0.0, -179.0); // aircraft
+
+            // Should be approximately 2° of longitude at equator ≈ 222 km
+            // (111,320 m/degree × 2 degrees)
+            Assert.InRange(d, 220000.0, 225000.0);
+        }
+
+        [Fact]
+        public void GreatCircleDistance_Antimeridian_Symmetric()
+        {
+            // Distance should be the same regardless of direction
+            double d1 = AirplaneMath.GreatCircleDistanceMeters(0.0, 179.0, 0.0, -179.0);
+            double d2 = AirplaneMath.GreatCircleDistanceMeters(0.0, -179.0, 0.0, 179.0);
+
+            Assert.Equal(d1, d2, 1.0); // Within 1 meter
+        }
+
+        [Fact]
+        public void GreatCircleDistance_PoleAntimeridian_CrossesDateLine()
+        {
+            // From Bering Strait (65°N, 179°W) to Chukotka (65°N, 179°E)
+            // These are actually very close geographically
+            double d = AirplaneMath.GreatCircleDistanceMeters(
+                65.0, -179.0,
+                65.0, 179.0);
+
+            // Should be approximately 2° of longitude at 65°N
+            // 111,320 × cos(65°) × 2 ≈ 93,800 m
+            Assert.InRange(d, 90000.0, 98000.0);
+        }
     }
 }
+
+// CI trigger update: verifying CI picks up changes

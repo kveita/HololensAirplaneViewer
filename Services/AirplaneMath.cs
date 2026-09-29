@@ -106,6 +106,10 @@ namespace HololensAirplaneViewer.Services
         ///   1° longitude ≈ 111,320 m × cos(lat)
         /// Horizontal offset is clamped into the dome radius; the real altitude
         /// is scaled into a vertical display offset (capped).
+        ///
+        /// Longitude differences are normalized to [-180, 180] to handle
+        /// the antimeridian correctly (e.g. observer at 179°, aircraft at -179°
+        /// should be ~2° apart, not ~358°).
         /// </summary>
         public static Vector3 ComputeDomePosition(
             double planeLatDeg, double planeLonDeg, double planeAltM,
@@ -113,7 +117,7 @@ namespace HololensAirplaneViewer.Services
             Vector3 worldCenter, float ceilingY)
         {
             double dLat = planeLatDeg - observerLatDeg;
-            double dLon = planeLonDeg - observerLonDeg;
+            double dLon = NormalizeLongitude(planeLonDeg - observerLonDeg);
 
             double xMeters = dLon * OneDegreeMeters * Math.Cos(DegreesToRadians(observerLatDeg));
             // HoloLens view space looks down -Z when facing forward.
@@ -140,6 +144,17 @@ namespace HololensAirplaneViewer.Services
             }
 
             return new Vector3(worldCenter.X + x, y, worldCenter.Z + z);
+        }
+
+        /// <summary>
+        /// Normalizes a longitude difference to the range [-180, 180].
+        /// Essential for correct distance calculations near the antimeridian.
+        /// </summary>
+        private static double NormalizeLongitude(double lonDiff)
+        {
+            while (lonDiff > 180.0) lonDiff -= 360.0;
+            while (lonDiff < -180.0) lonDiff += 360.0;
+            return lonDiff;
         }
     }
 }

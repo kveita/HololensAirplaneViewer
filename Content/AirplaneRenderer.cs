@@ -44,6 +44,9 @@ namespace HololensAirplaneViewer.Content
         private bool fetchInProgress;
         private DateTime lastFetchUtc = DateTime.MinValue;
         private volatile List<AirplaneState> airplanes = new List<AirplaneState>();
+        private bool manualLocationActive;
+        private double manualLatitude;
+        private double manualLongitude;
 
         private Vector3 currentHeadPosition = Vector3.Zero;
         private Vector3 currentHeadDirection = Vector3.UnitZ;
@@ -57,7 +60,7 @@ namespace HololensAirplaneViewer.Content
         /// </summary>
         private float compassHeadingDegrees;
 
-        private string gpsDebug = "GPS: --";
+        private string gpsDebug = "GPS: WAITING FOR OS LOCATION";
         private string apiDebug = "OpenSky: --";
         private string lastError = "";
         
@@ -67,8 +70,8 @@ namespace HololensAirplaneViewer.Content
         private SpatialStationaryFrameOfReference stationaryReferenceFrame;
 
         // Observer's GPS fix (used for lat/lon → local dome mapping)
-        private double currentLatitude = 59.91;  // ≈ Oslo fallback
-        private double currentLongitude = 10.75;
+        private double currentLatitude;
+        private double currentLongitude;
 
         private const int MaxAirplanesRendered = 15;
         private const float MarkerScale = 0.25f;
@@ -135,30 +138,111 @@ namespace HololensAirplaneViewer.Content
             }
         }
 
+        /// <summary>
+        /// Monotonically increasing counter from LocationOverrideStore.
+        /// Captured at fetch start; if it changes before the fetch completes,
+        /// the results are stale and must be discarded.
+        /// </summary>
+        private int fetchGeneration;
+
         public async void Update(StepTimer timer)
         {
+            double requestedLatitude;
+            double requestedLongitude;
+            bool requestedManualLocation = LocationOverrideStore.TryGet(
+                out requestedLatitude,
+                out requestedLongitude);
+
+            if (requestedManualLocation != manualLocationActive
+                || (requestedManualLocation
+                    && (requestedLatitude != manualLatitude
+                        || requestedLongitude != manualLongitude)))
+            {
+                manualLocationActive = requestedManualLocation;
+                manualLatitude = requestedLatitude;
+                manualLongitude = requestedLongitude;
+                // Clear stale aircraft and update observer coordinates immediately
+                // so the renderer shows the new location while waiting for fresh data.
+                airplanes = new List<AirplaneState>();
+                currentLatitude = requestedLatitude;
+                currentLongitude = requestedLongitude;
+                lastFetchUtc = DateTime.MinValue;
+            }
+
             // Fetch fresh aircraft state vectors every 10 seconds (OpenSky anonymous tier)
             if (!fetchInProgress && (DateTime.UtcNow - lastFetchUtc).TotalSeconds >= 10.0)
             {
                 fetchInProgress = true;
+                // Capture the current override generation so we can detect
+                // if the user changed the location while this fetch is in flight.
+                fetchGeneration = LocationOverrideStore.GetGeneration();
                 try
                 {
-                    double lat = 59.91, lon = 10.75; // fallback ≈ Oslo
-                    var gps = await geolocationService.GetCurrentLocationAsync();
-                    if (gps != null)
+                    double lat;
+                    double lon;
+                    bool useManualLocation = LocationOverrideStore.TryGet(out lat, out lon);
+
+                    if (!useManualLocation)
                     {
+                        // HoloLens 1 has no dedicated GPS chip. Geolocator
+                        // obtains the OS-inferred location, including its
+                        // network/IP-based location when available.
+                        var gps = await geolocationService.GetCurrentLocationAsync();
+                        if (gps == null)
+                        {
+                            // Never query OpenSky with a fabricated observer
+                            // position. Retry after the normal fetch interval.
+                            gpsDebug = "GPS: WAITING FOR OS LOCATION";
+                            apiDebug = "OpenSky: WAITING FOR GPS";
+                            airplanes = new List<AirplaneState>();
+                            lastFetchUtc = DateTime.UtcNow;
+                            return;
+                        }
+
                         lat = gps.Coordinate.Point.Position.Latitude;
                         lon = gps.Coordinate.Point.Position.Longitude;
-                        currentLatitude = lat;
-                        currentLongitude = lon;
-                        gpsDebug = string.Format(CultureInfo.InvariantCulture, "GPS {0:F3},{1:F3}", lat, lon);
+                        gpsDebug = string.Format(
+                            CultureInfo.InvariantCulture,
+                            "GPS {0:F3},{1:F3}",
+                            lat,
+                            lon);
                     }
+                    else
+                    {
+                        gpsDebug = string.Format(
+                            CultureInfo.InvariantCulture,
+                            "GPS* {0:F3},{1:F3}",
+                            lat,
+                            lon);
+                    }
+
+                    currentLatitude = lat;
+                    currentLongitude = lon;
+
+                    // Normalize longitude bounds to [-180, 180] for the OpenSky query.
+                    // Near the antimeridian, lon ± 3.0 can exceed the valid range,
+                    // causing incorrect query results or API errors.
+                    double lomin = NormalizeLongitude(lon - 3.0);
+                    double lomax = NormalizeLongitude(lon + 3.0);
+                    // Clamp latitude bounds to [-90, 90] for the OpenSky API.
+                    // Near the poles, lat ± 3.0 can exceed the valid range.
+                    double lamin = Math.Max(-90.0, Math.Min(90.0, lat - 3.0));
+                    double lamax = Math.Max(-90.0, Math.Min(90.0, lat + 3.0));
 
                     // Fetch aircraft within a ±3° box around the user's GPS fix
                     var live = await airplaneService.GetLiveStatesAsync(
-                        lamin: lat - 3.0, lamax: lat + 3.0,
-                        lomin: lon - 3.0, lomax: lon + 3.0,
+                        lamin: lamin, lamax: lamax,
+                        lomin: lomin, lomax: lomax,
                         maxCount: MaxAirplanesRendered);
+
+                    // If the user changed the location override while this fetch was
+                    // in flight, discard these stale results — the new location will
+                    // be fetched on the next update cycle.
+                    if (fetchGeneration != LocationOverrideStore.GetGeneration())
+                    {
+                        lastFetchUtc = DateTime.UtcNow;
+                        return;
+                    }
 
                     // Rank aircraft: airborne first, but also keep on-ground
                     // traffic within 15 km of the user (e.g. aircraft at your
@@ -663,6 +747,17 @@ namespace HololensAirplaneViewer.Content
             while (a > Math.PI) a -= (float)(2.0 * Math.PI);
             while (a < -Math.PI) a += (float)(2.0 * Math.PI);
             return a;
+        }
+
+        /// <summary>
+        /// Normalizes a longitude value to the range [-180, 180].
+        /// Essential for correct behavior near the antimeridian.
+        /// </summary>
+        private static double NormalizeLongitude(double lon)
+        {
+            while (lon > 180.0) lon -= 360.0;
+            while (lon < -180.0) lon += 360.0;
+            return lon;
         }
 
         private static string Sanitize(string text)

@@ -1,4 +1,4 @@
-﻿//
+//
 // Comment out this preprocessor definition to disable all of the
 // sample content.
 //
@@ -83,6 +83,7 @@ namespace HololensAirplaneViewer
 
         // Guard against stacking airplane info dialogs.
         private bool _infoDialogShowing = false;
+        private bool _settingsViewOpening = false;
 
         // Cache whether or not the HolographicCamera.Display property can be accessed.
         bool canGetHolographicDisplayForCamera = false;
@@ -588,21 +589,39 @@ namespace HololensAirplaneViewer
 
         private async void OpenSettingsView()
         {
-            // Use ApplicationViewSwitcher to switch to a new XAML view
-            CoreApplicationView newView = CoreApplication.CreateNewView();
-            int newViewId = 0;
-            
-            await newView.Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+            if (_settingsViewOpening)
             {
-                var frame = new Windows.UI.Xaml.Controls.Frame();
-                frame.Navigate(typeof(SettingsPage));
-                Windows.UI.Xaml.Window.Current.Content = frame;
-                Windows.UI.Xaml.Window.Current.Activate();
-                newViewId = ApplicationView.GetForCurrentView().Id;
-            });
-            
-            await ApplicationViewSwitcher.TryShowAsStandaloneAsync(newViewId);
-            Debug.WriteLine("View switching initialized.");
+                return;
+            }
+
+            _settingsViewOpening = true;
+
+            // Use ApplicationViewSwitcher to switch to a new XAML view
+            try
+            {
+                CoreApplicationView newView = CoreApplication.CreateNewView();
+                int newViewId = 0;
+
+                await newView.Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+                {
+                    var frame = new Windows.UI.Xaml.Controls.Frame();
+                    frame.Navigate(typeof(SettingsPage));
+                    Windows.UI.Xaml.Window.Current.Content = frame;
+                    Windows.UI.Xaml.Window.Current.Activate();
+                    newViewId = ApplicationView.GetForCurrentView().Id;
+                });
+
+                await ApplicationViewSwitcher.TryShowAsStandaloneAsync(newViewId);
+                Debug.WriteLine("Location settings view initialized.");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[Settings] View error: {ex.Message}");
+            }
+            finally
+            {
+                _settingsViewOpening = false;
+            }
         }
 
         private async void ShowAirplaneInfoDialog(AirplaneState plane)
