@@ -165,6 +165,9 @@ namespace HololensAirplaneViewer.Content
             if (!fetchInProgress && (DateTime.UtcNow - lastFetchUtc).TotalSeconds >= 10.0)
             {
                 fetchInProgress = true;
+                // Capture the current override generation at fetch start so we can
+                // detect if the location changed during any awaited operation.
+                int fetchGeneration = LocationOverrideStore.GetGeneration();
                 try
                 {
                     double lat;
@@ -203,6 +206,14 @@ namespace HololensAirplaneViewer.Content
                             "GPS* {0:F3},{1:F3}",
                             lat,
                             lon);
+                    }
+
+                    // If the location override changed while we were awaiting GPS,
+                    // discard this stale result and let the next cycle fetch fresh data.
+                    if (fetchGeneration != LocationOverrideStore.GetGeneration())
+                    {
+                        lastFetchUtc = DateTime.UtcNow;
+                        return;
                     }
 
                     bool observerLocationChanged = !observerLocationKnown
