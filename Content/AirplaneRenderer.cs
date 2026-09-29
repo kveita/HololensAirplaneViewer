@@ -218,12 +218,25 @@ namespace HololensAirplaneViewer.Content
                         airplanes = new List<AirplaneState>();
                     }
 
+                    // Capture the current override generation before the await so we can
+                    // discard stale results if the location changed while the request was in flight.
+                    int fetchGeneration = LocationOverrideStore.GetGeneration();
+
                     // Fetch aircraft within a ±3° box around the user's GPS fix
                     var live = await airplaneService.GetLiveStatesAroundAsync(
                         latitude: lat,
                         longitude: lon,
                         radiusDegrees: 3.0,
                         maxCount: MaxAirplanesRendered);
+
+                    // If the location override changed while this fetch was in flight,
+                    // discard these stale results — the new location will be fetched on
+                    // the next update cycle.
+                    if (fetchGeneration != LocationOverrideStore.GetGeneration())
+                    {
+                        lastFetchUtc = DateTime.UtcNow;
+                        return;
+                    }
 
                     // Rank aircraft: airborne first, but also keep on-ground
                     // traffic within 15 km of the user (e.g. aircraft at your
