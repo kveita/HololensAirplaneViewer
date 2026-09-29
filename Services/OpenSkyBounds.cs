@@ -85,7 +85,10 @@ namespace HololensAirplaneViewer.Services
 
         private static double NormalizeLongitude(double longitude)
         {
-            longitude %= 360.0;
+            // Use modulo instead of repeated +/- 360 to avoid unbounded
+            // iteration for very large inputs (e.g., 1e300).
+            // C# % is remainder (sign follows dividend), so we adjust.
+            longitude = longitude % 360.0;
             if (longitude < MinLongitude)
             {
                 longitude += 360.0;
@@ -94,7 +97,6 @@ namespace HololensAirplaneViewer.Services
             {
                 longitude -= 360.0;
             }
-
             return longitude;
         }
 

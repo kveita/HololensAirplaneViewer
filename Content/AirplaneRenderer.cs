@@ -229,7 +229,10 @@ namespace HololensAirplaneViewer.Content
                         airplanes = new List<AirplaneState>();
                     }
 
-                    // Fetch aircraft within a ±3° box around the user's GPS fix
+                    // Fetch aircraft within a ±3° box around the user's GPS fix.
+                    // Geographic bounds are computed by OpenSkyBounds.Around(), which
+                    // clamps latitude to [-90°, 90°] and splits boxes crossing the
+                    // antimeridian — so no invalid bounds reach the OpenSky API.
                     var live = await airplaneService.GetLiveStatesAroundAsync(
                         latitude: lat,
                         longitude: lon,
