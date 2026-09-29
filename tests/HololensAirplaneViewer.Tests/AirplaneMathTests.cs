@@ -241,8 +241,8 @@ namespace HololensAirplaneViewer.Tests
             // not 358°. Without normalization, dLon would be -358° causing
             // incorrect positioning.
             var p = AirplaneMath.ComputeDomePosition(
-                -179.0, 0.0, 0.0,  // plane at 179°W
-                179.0, 0.0,        // observer at 179°E
+                0.0, -179.0, 0.0,  // plane at 179°W (lat=0, lon=-179)
+                0.0, 179.0,        // observer at 179°E (lat=0, lon=179)
                 Origin, CeilingY);
 
             // The plane should appear ~2° east of the observer (positive X)
@@ -256,8 +256,8 @@ namespace HololensAirplaneViewer.Tests
         {
             // Observer at 179°W (-179°), aircraft at 179°E — only 2° apart
             var p = AirplaneMath.ComputeDomePosition(
-                179.0, 0.0, 0.0,   // plane at 179°E
-                -179.0, 0.0,       // observer at 179°W
+                0.0, 179.0, 0.0,   // plane at 179°E (lat=0, lon=179)
+                0.0, -179.0,       // observer at 179°W (lat=0, lon=-179)
                 Origin, CeilingY);
 
             // The plane should appear ~2° west of the observer (negative X)
