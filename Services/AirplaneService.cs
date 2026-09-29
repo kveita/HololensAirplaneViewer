@@ -144,7 +144,7 @@ namespace HololensAirplaneViewer.Services
 
                     list.Add(plane);
 
-                    if (list.Count >= 45)
+                    if (list.Count >= 90)
                         break;
                 }
             }
