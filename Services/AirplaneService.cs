@@ -69,6 +69,11 @@ namespace HololensAirplaneViewer.Services
             var allStates = new List<AirplaneState>();
             var bounds = OpenSkyBounds.Around(latitude, longitude, radiusDegrees);
 
+            // Fetch with a higher limit per box to avoid discarding nearby
+            // ground aircraft that fall outside the per-box top-N but would
+            // rank highly after observer-aware selection.
+            int perBoxLimit = maxCount * 3;
+
             foreach (var box in bounds)
             {
                 allStates.AddRange(await GetLiveStatesAsync(
@@ -76,7 +81,7 @@ namespace HololensAirplaneViewer.Services
                     lamax: box.Lamax,
                     lomin: box.Lomin,
                     lomax: box.Lomax,
-                    maxCount: maxCount));
+                    maxCount: perBoxLimit));
             }
 
             // The split boxes only meet at the antimeridian, but deduplicate
