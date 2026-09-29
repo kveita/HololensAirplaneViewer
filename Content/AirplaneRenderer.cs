@@ -229,10 +229,6 @@ namespace HololensAirplaneViewer.Content
                         airplanes = new List<AirplaneState>();
                     }
 
-                    // Capture the current override generation before the await so we can
-                    // discard stale results if the location changed while the request was in flight.
-                    int fetchGeneration = LocationOverrideStore.GetGeneration();
-
                     // Fetch aircraft within a ±3° box around the user's GPS fix
                     var live = await airplaneService.GetLiveStatesAroundAsync(
                         latitude: lat,
