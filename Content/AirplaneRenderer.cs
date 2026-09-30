@@ -73,6 +73,18 @@ namespace HololensAirplaneViewer.Content
         private double currentLatitude;
         private double currentLongitude;
 
+        /// <summary>Latitude currently used as the observer position.</summary>
+        public double CurrentLatitude
+        {
+            get { return currentLatitude; }
+        }
+
+        /// <summary>Longitude currently used as the observer position.</summary>
+        public double CurrentLongitude
+        {
+            get { return currentLongitude; }
+        }
+
         private const int MaxAirplanesRendered = 15;
         private const float MarkerScale = 0.25f;
         private const float CeilingOffset = 1.4f;
@@ -806,9 +818,16 @@ namespace HololensAirplaneViewer.Content
             // Simplified sphere intersection for the button
             Vector3 gazeDir = headPose.Head.ForwardDirection;
             Vector3 gazeOrigin = headPose.Head.Position;
-            
+
+            // The label is compass-rotated around the dome center when drawn,
+            // so the hit sphere must be rotated the same way (see DrawTextBillboard).
+            float headingRad = (float)(-compassHeadingDegrees * Math.PI / 180.0);
+            Matrix4x4 compassRot = Matrix4x4.CreateRotationY(headingRad);
+            Vector3 buttonPosition =
+                Vector3.Transform(settingsButtonPosition - worldCenter, compassRot) + worldCenter;
+
             // Vector from gaze origin to button center
-            Vector3 toButton = settingsButtonPosition - gazeOrigin;
+            Vector3 toButton = buttonPosition - gazeOrigin;
             
             // Distance from origin to projection of center onto gaze line
             float t = Vector3.Dot(toButton, gazeDir);
@@ -819,7 +838,7 @@ namespace HololensAirplaneViewer.Content
             Vector3 closestPoint = gazeOrigin + gazeDir * t;
             
             // Distance squared from button center to closest point on line
-            float distSq = (settingsButtonPosition - closestPoint).LengthSquared();
+            float distSq = (buttonPosition - closestPoint).LengthSquared();
             
             return distSq < (settingsButtonRadius * settingsButtonRadius);
         }

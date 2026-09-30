@@ -26,6 +26,26 @@ namespace HololensAirplaneViewer.Services
             }
         }
 
+        /// <summary>
+        /// Drops the manual override so the app returns to the automatic
+        /// (device supplied) location on the next update.
+        /// </summary>
+        public static void Clear()
+        {
+            lock (SyncRoot)
+            {
+                if (!hasOverride)
+                {
+                    return;
+                }
+
+                hasOverride = false;
+                latitude = 0.0;
+                longitude = 0.0;
+                generation++;
+            }
+        }
+
         public static bool TryGet(out double currentLatitude, out double currentLongitude)
         {
             lock (SyncRoot)
