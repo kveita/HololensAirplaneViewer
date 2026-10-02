@@ -714,9 +714,14 @@ namespace HololensAirplaneViewer
                     "Longitude",
                     "Apply");
 
-                if (choice != 0 && choice != 1)
+                if (choice == 2)
                 {
                     LocationOverrideStore.Set(latitude, longitude);
+                    return;
+                }
+
+                if (choice < 0)
+                {
                     return;
                 }
 
