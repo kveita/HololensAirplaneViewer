@@ -814,7 +814,6 @@ namespace HololensAirplaneViewer
             }
 
             dialog.DefaultCommandIndex = 0;
-            dialog.CancelCommandIndex = (uint)(labels.Length - 1);
 
             await dialog.ShowAsync();
             return selected;
