@@ -629,7 +629,7 @@ namespace HololensAirplaneViewer
             while (true)
             {
                 string status = string.Format(
-                    "{0}\\n{1}",
+                    "{0}\n{1}",
                     manual ? "Manual location" : "Automatic (device) location",
                     LocationSettingsModel.FormatCoordinates(latitude, longitude));
 
