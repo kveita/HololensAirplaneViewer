@@ -40,8 +40,9 @@ namespace HololensAirplaneViewer.Services
                 }
 
                 hasOverride = false;
-                latitude = 0.0;
-                longitude = 0.0;
+                // Preserve last manual coordinates so the renderer does not
+                // temporarily display 0,0 while waiting for the next automatic fix.
+                // The generation bump signals the renderer to resume automatic mode.
                 generation++;
             }
         }
