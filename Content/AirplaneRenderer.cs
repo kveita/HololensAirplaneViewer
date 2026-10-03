@@ -85,6 +85,14 @@ namespace HololensAirplaneViewer.Content
             get { return currentLongitude; }
         }
 
+        /// <summary>True if the current observer coordinates are backed by a real device fix or manual override.</summary>
+        public bool HasObserverFix
+        {
+            get { return hasObserverFix; }
+        }
+
+        private bool hasObserverFix;
+
         private const int MaxAirplanesRendered = 15;
         private const float MarkerScale = 0.25f;
         private const float CeilingOffset = 1.4f;
@@ -178,6 +186,7 @@ namespace HololensAirplaneViewer.Content
                 airplanes = new List<AirplaneState>();
                 currentLatitude = requestedLatitude;
                 currentLongitude = requestedLongitude;
+                hasObserverFix = requestedManualLocation;
                 lastFetchUtc = DateTime.MinValue;
             }
 
@@ -230,6 +239,7 @@ namespace HololensAirplaneViewer.Content
 
                     currentLatitude = lat;
                     currentLongitude = lon;
+                    hasObserverFix = true;
 
                     // Normalize longitude bounds to [-180, 180] for the OpenSky query.
                     // Near the antimeridian, lon ± 3.0 can exceed the valid range,
@@ -252,7 +262,10 @@ namespace HololensAirplaneViewer.Content
                     // be fetched on the next update cycle.
                     if (fetchGeneration != LocationOverrideStore.GetGeneration())
                     {
-                        lastFetchUtc = DateTime.UtcNow;
+                        // Preserve immediate retry: the state-change branch already set
+                        // lastFetchUtc = MinValue, so we leave it untouched to trigger a
+                        // fresh fetch immediately.
+                        // Do not update lastFetchUtc here (previously it forced a 10s delay).
                         return;
                     }
 

@@ -619,6 +619,7 @@ namespace HololensAirplaneViewer
             double latitude;
             double longitude;
             bool manual = LocationOverrideStore.TryGet(out latitude, out longitude);
+            bool hasFix = manual || airplaneRenderer.HasObserverFix;
             if (!manual)
             {
                 latitude = airplaneRenderer.CurrentLatitude;
@@ -628,22 +629,40 @@ namespace HololensAirplaneViewer
             while (true)
             {
                 string status = string.Format(
-                    "{0}\n{1}",
+                    "{0}\\n{1}",
                     manual ? "Manual location" : "Automatic (device) location",
                     LocationSettingsModel.FormatCoordinates(latitude, longitude));
 
-                int choice = await ShowChoiceDialogAsync(
-                    status,
-                    "Location Settings",
-                    "Pick a city",
-                    "Adjust coordinates",
-                    "Close");
+                bool showAdjust = hasFix;
+                int choice;
+                if (showAdjust)
+                {
+                    choice = await ShowChoiceDialogAsync(
+                        status,
+                        "Location Settings",
+                        "Pick a city",
+                        "Adjust coordinates",
+                        "Close");
+                }
+                else
+                {
+                    // No real fix yet - avoid presenting zero/stale coordinates for adjustment.
+                    string noFixStatus = string.Format(
+                        "{0}\\n{1}\\n\\nWaiting for device location…",
+                        manual ? "Manual location" : "Automatic (device) location",
+                        LocationSettingsModel.FormatCoordinates(latitude, longitude));
+                    choice = await ShowChoiceDialogAsync(
+                        noFixStatus,
+                        "Location Settings",
+                        "Pick a city",
+                        "Close");
+                }
 
                 if (choice == 0)
                 {
                     await PickPresetLocationAsync();
                 }
-                else if (choice == 1)
+                else if (choice == 1 && showAdjust)
                 {
                     await AdjustCoordinatesAsync(latitude, longitude);
                 }
@@ -653,6 +672,7 @@ namespace HololensAirplaneViewer
                 }
 
                 manual = LocationOverrideStore.TryGet(out latitude, out longitude);
+                hasFix = manual || airplaneRenderer.HasObserverFix;
                 if (!manual)
                 {
                     latitude = airplaneRenderer.CurrentLatitude;
